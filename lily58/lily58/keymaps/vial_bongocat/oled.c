@@ -1,17 +1,6 @@
 
 #ifdef OLED_ENABLE
 
-oled_rotation_t oled_init_user(oled_rotation_t rotation) {
-  if (!is_keyboard_master())
-    return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
-  return rotation;
-}
-
-layer_state_t layer_state_set_user(layer_state_t state) {
-    state = update_tri_layer_state(state, 1, 2, 3);
-    return state;
-}
-
 // WPM-responsive animation stuff here
 #define IDLE_FRAMES 5
 #define IDLE_SPEED 40 // below this wpm value your animation will idle
@@ -23,7 +12,19 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
 #define ANIM_FRAME_DURATION 200 // how long each frame lasts in ms
 // #define SLEEP_TIMER 60000 // should sleep after this period of 0 wpm, needs fixing
-#define ANIM_SIZE 636 // number of bytes in array, minimize for adequate firmware size, max is 1024
+#define ANIM_SIZE 512 // number of bytes in array, minimize for adequate firmware size, max is 1024
+
+
+oled_rotation_t oled_init_user(oled_rotation_t rotation) {
+  if (!is_keyboard_master())
+    return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
+  return rotation;
+}
+
+layer_state_t layer_state_set_user(layer_state_t state) {
+    state = update_tri_layer_state(state, 1, 2, 3);
+    return state;
+}
 
 uint32_t anim_timer = 0;
 uint32_t anim_sleep = 0;
@@ -86,6 +87,40 @@ static const char PROGMEM tap[TAP_FRAMES][ANIM_SIZE] = {
     },
 };
 
+static void render_anim(void) {
+    // assumes 1 frame prep stage
+    void animation_phase(void) {
+        if(get_current_wpm() <= IDLE_SPEED){
+            current_idle_frame = (current_idle_frame + 1) % IDLE_FRAMES;
+            oled_write_raw_P(idle[abs((IDLE_FRAMES - 1) - current_idle_frame)], ANIM_SIZE);
+         }
+         if(get_current_wpm() > IDLE_SPEED && get_current_wpm() < TAP_SPEED){
+             // oled_write_raw_P(prep[abs((PREP_FRAMES-1)-current_prep_frame)], ANIM_SIZE); // uncomment if PREP_FRAMES >1
+             oled_write_raw_P(prep[0], ANIM_SIZE);  // remove if PREP_FRAMES >1
+         }
+         if(get_current_wpm() >=TAP_SPEED){
+             current_tap_frame = (current_tap_frame + 1) % TAP_FRAMES;
+             oled_write_raw_P(tap[abs((TAP_FRAMES - 1) - current_tap_frame)], ANIM_SIZE);
+         }
+    }
+
+
+    if(get_current_wpm() > 0) {
+        oled_on(); // not essential but turns on animation OLED with any alpha keypress
+        if(timer_elapsed32(anim_timer) > ANIM_FRAME_DURATION) {
+            anim_timer = timer_read32();
+            animation_phase();
+        }
+        anim_sleep = timer_read32();
+    } else {
+        if(timer_elapsed32(anim_sleep) > OLED_TIMEOUT) {
+            oled_off();
+        } else if (timer_elapsed32(anim_timer) > ANIM_FRAME_DURATION) {
+            anim_timer = timer_read32();
+            animation_phase();
+        }
+    }
+}
 
 static void render_logo(void) {
     static const char PROGMEM raw_logo[] = {
@@ -169,7 +204,8 @@ bool oled_task_user(void) {
     oled_write_ln(read_keylogs(), false);
 
   } else {
-      render_logo();
+      render_anim();
+      /* render_logo(); */
   }
     return false;
 }
