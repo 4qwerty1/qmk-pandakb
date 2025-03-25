@@ -27,7 +27,7 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 }
 
 uint32_t anim_timer = 0;
-uint32_t anim_sleep = 0;
+uint32_t last_key_press = 0;
 uint8_t current_idle_frame = 0;
 // uint8_t current_prep_frame = 0; // uncomment if PREP_FRAMES >1
 uint8_t current_tap_frame = 0;
@@ -87,6 +87,11 @@ static const char PROGMEM tap[TAP_FRAMES][ANIM_SIZE] = {
     },
 };
 
+void update_last_key_press(void) {
+    last_key_press = timer_read32();
+}
+
+
 static void render_anim(void) {
     // assumes 1 frame prep stage
     void animation_phase(void) {
@@ -111,9 +116,8 @@ static void render_anim(void) {
             anim_timer = timer_read32();
             animation_phase();
         }
-        anim_sleep = timer_read32();
     } else {
-        if(timer_elapsed32(anim_sleep) > OLED_TIMEOUT) {
+        if(timer_elapsed32(last_key_press) > OLED_TIMEOUT) {
             oled_off();
         } else if (timer_elapsed32(anim_timer) > ANIM_FRAME_DURATION) {
             anim_timer = timer_read32();
